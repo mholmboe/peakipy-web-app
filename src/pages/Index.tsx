@@ -1,12 +1,256 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useCallback, useMemo } from 'react';
+import { Header } from '@/components/Header';
+import { Hero } from '@/components/Hero';
+import { FileUpload } from '@/components/FileUpload';
+import { DataChart } from '@/components/DataChart';
+import { ControlPanel } from '@/components/ControlPanel';
+import { ResultsPanel } from '@/components/ResultsPanel';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import {
+  parseDataFile,
+  processData,
+  calculateBaseline,
+  fitPeaks,
+  type DataPoint,
+  type PeakComponent,
+  type ProcessingOptions,
+  type BaselineOptions,
+  type FitResult,
+} from '@/lib/peakFitting';
 
 const Index = () => {
+  const [rawData, setRawData] = useState<DataPoint[]>([]);
+  const [fileName, setFileName] = useState<string>();
+  const [processing, setProcessing] = useState<ProcessingOptions>({
+    normalize: false,
+  });
+  const [baseline, setBaseline] = useState<BaselineOptions>({
+    method: 'none',
+    degree: 2,
+    lambda: 1e5,
+    p: 0.01,
+    radius: 10,
+  });
+  const [components, setComponents] = useState<PeakComponent[]>([]);
+  const [fitResult, setFitResult] = useState<FitResult>();
+  const [isLoading, setIsLoading] = useState(false);
+  const [showBaseline, setShowBaseline] = useState(true);
+  const [showComponents, setShowComponents] = useState(true);
+  const [showResiduals, setShowResiduals] = useState(false);
+
+  // Process data when raw data or options change
+  const processedData = useMemo(() => {
+    if (rawData.length === 0) return [];
+    return processData(rawData, processing);
+  }, [rawData, processing]);
+
+  // Calculate data range
+  const dataRange = useMemo(() => {
+    if (processedData.length === 0) return { min: 0, max: 100 };
+    const xValues = processedData.map(d => d.x);
+    return {
+      min: Math.min(...xValues),
+      max: Math.max(...xValues),
+    };
+  }, [processedData]);
+
+  // Calculate baseline when options change
+  const calculatedBaseline = useMemo(() => {
+    if (processedData.length === 0) return [];
+    return calculateBaseline(processedData, baseline);
+  }, [processedData, baseline]);
+
+  // Handle file load
+  const handleFileLoad = useCallback((content: string, name: string) => {
+    try {
+      const data = parseDataFile(content);
+      if (data.length === 0) {
+        toast.error('No valid data found in file');
+        return;
+      }
+      
+      setRawData(data);
+      setFileName(name);
+      setComponents([]);
+      setFitResult(undefined);
+      toast.success(`Loaded ${data.length} data points from ${name}`);
+    } catch (error) {
+      toast.error('Failed to parse data file');
+      console.error(error);
+    }
+  }, []);
+
+  // Run fitting
+  const handleFit = useCallback(() => {
+    if (processedData.length === 0) {
+      toast.error('No data loaded');
+      return;
+    }
+    if (components.length === 0) {
+      toast.error('Add at least one peak component');
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      try {
+        const result = fitPeaks(processedData, components, calculatedBaseline, 200);
+        setFitResult(result);
+        setComponents(result.parameters);
+        toast.success(`Fit complete! R² = ${result.rSquared.toFixed(4)}`);
+      } catch (error) {
+        toast.error('Fitting failed');
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 50);
+  }, [processedData, components, calculatedBaseline]);
+
+  // Reset everything
+  const handleReset = useCallback(() => {
+    setComponents([]);
+    setFitResult(undefined);
+    setProcessing({ normalize: false });
+    setBaseline({
+      method: 'none',
+      degree: 2,
+      lambda: 1e5,
+      p: 0.01,
+      radius: 10,
+    });
+    toast.info('Settings reset');
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <Header />
+      <Hero />
+      
+      <main className="container py-8 space-y-8">
+        {/* File Upload Section */}
+        {rawData.length === 0 && (
+          <section className="max-w-2xl mx-auto">
+            <FileUpload onFileLoad={handleFileLoad} />
+          </section>
+        )}
+
+        {/* Main Content */}
+        {rawData.length > 0 && (
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Left Column - Controls */}
+            <div className="space-y-6">
+              <ControlPanel
+                processing={processing}
+                baseline={baseline}
+                components={components}
+                dataRange={dataRange}
+                onProcessingChange={setProcessing}
+                onBaselineChange={setBaseline}
+                onComponentsChange={setComponents}
+                onFit={handleFit}
+                onReset={handleReset}
+                isLoading={isLoading}
+              />
+              
+              {/* Upload new file button */}
+              <div className="text-center">
+                <label className="cursor-pointer text-sm text-primary hover:underline">
+                  Load different file
+                  <input
+                    type="file"
+                    accept=".txt,.csv,.dat,.xy"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          handleFileLoad(evt.target?.result as string, file.name);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Middle Column - Chart */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Display Options */}
+              <div className="flex flex-wrap gap-6 justify-end">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="showBaseline"
+                    checked={showBaseline}
+                    onCheckedChange={setShowBaseline}
+                  />
+                  <Label htmlFor="showBaseline" className="text-sm">Baseline</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="showComponents"
+                    checked={showComponents}
+                    onCheckedChange={setShowComponents}
+                  />
+                  <Label htmlFor="showComponents" className="text-sm">Components</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="showResiduals"
+                    checked={showResiduals}
+                    onCheckedChange={setShowResiduals}
+                  />
+                  <Label htmlFor="showResiduals" className="text-sm">Residuals</Label>
+                </div>
+              </div>
+
+              <DataChart
+                data={processedData}
+                fitResult={fitResult || (baseline.method !== 'none' ? { 
+                  fittedData: [], 
+                  residuals: [], 
+                  components: [], 
+                  baseline: calculatedBaseline,
+                  rSquared: 0,
+                  rmse: 0,
+                  parameters: []
+                } : undefined)}
+                showBaseline={showBaseline}
+                showComponents={showComponents}
+                showResiduals={showResiduals}
+                title={fileName || 'Spectrum Data'}
+              />
+
+              <ResultsPanel
+                fitResult={fitResult}
+                originalData={rawData}
+                processedData={processedData}
+                processingOptions={processing}
+                baselineOptions={baseline}
+                fileName={fileName}
+              />
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-border py-8 mt-16">
+        <div className="container text-center text-sm text-muted-foreground">
+          <p>
+            Based on <a href="https://github.com/mholmboe/peakipy" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">PeakiPy</a> by mholmboe
+          </p>
+          <p className="mt-1">
+            Profile fitting application for baseline subtraction and peak analysis
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };
