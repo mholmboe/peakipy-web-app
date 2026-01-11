@@ -24,7 +24,7 @@ export function ResultsPanel({
 }: ResultsPanelProps) {
   const downloadResults = () => {
     if (!fitResult) return;
-    
+
     const content = exportResults(processedData, fitResult, processingOptions, baselineOptions);
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -103,8 +103,14 @@ export function ResultsPanel({
               <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Fit Statistics
+                {fitResult.converged ? (
+                  <Badge variant="outline" className="bg-green-500/10 text-green-600">Converged</Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600">Not converged</Badge>
+                )}
+                <span className="text-xs text-muted-foreground">({fitResult.iterations} iter)</span>
               </h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">R²</p>
                   <Badge className={getRSquaredColor(fitResult.rSquared)}>
@@ -112,8 +118,24 @@ export function ResultsPanel({
                   </Badge>
                 </div>
                 <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Adj. R²</p>
+                  <p className="text-sm font-mono">{fitResult.adjustedRSquared.toFixed(6)}</p>
+                </div>
+                <div className="space-y-1">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">RMSE</p>
-                  <p className="text-lg font-mono">{fitResult.rmse.toFixed(6)}</p>
+                  <p className="text-sm font-mono">{fitResult.rmse.toFixed(6)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">χ² (reduced)</p>
+                  <p className="text-sm font-mono">{fitResult.reducedChiSquared.toFixed(4)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">AIC</p>
+                  <p className="text-sm font-mono">{fitResult.aic.toFixed(2)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">BIC</p>
+                  <p className="text-sm font-mono">{fitResult.bic.toFixed(2)}</p>
                 </div>
               </div>
             </div>

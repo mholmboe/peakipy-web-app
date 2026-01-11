@@ -32,6 +32,8 @@ const Index = () => {
     lambda: 1e5,
     p: 0.01,
     radius: 10,
+    shirleyIterations: 50,
+    shirleyTolerance: 1e-5,
   });
   const [components, setComponents] = useState<PeakComponent[]>([]);
   const [fitResult, setFitResult] = useState<FitResult>();
@@ -39,6 +41,7 @@ const Index = () => {
   const [showBaseline, setShowBaseline] = useState(true);
   const [showComponents, setShowComponents] = useState(true);
   const [showResiduals, setShowResiduals] = useState(false);
+  const [livePreview, setLivePreview] = useState(true);
 
   // Process data when raw data or options change
   const processedData = useMemo(() => {
@@ -57,8 +60,13 @@ const Index = () => {
   }, [processedData]);
 
   // Calculate baseline when options change
+  // For manual baseline, only calculate when not in edit mode
   const calculatedBaseline = useMemo(() => {
     if (processedData.length === 0) return [];
+    // Skip manual baseline while selecting points
+    if (baseline.method === 'manual' && baseline.manualEditMode) {
+      return processedData.map(d => ({ x: d.x, y: 0 }));
+    }
     return calculateBaseline(processedData, baseline);
   }, [processedData, baseline]);
 
@@ -70,7 +78,7 @@ const Index = () => {
         toast.error('No valid data found in file');
         return;
       }
-      
+
       setRawData(data);
       setFileName(name);
       setComponents([]);
@@ -94,14 +102,15 @@ const Index = () => {
     }
 
     setIsLoading(true);
-    
+
     // Use setTimeout to allow UI to update
     setTimeout(() => {
       try {
-        const result = fitPeaks(processedData, components, calculatedBaseline, 200);
+        const result = fitPeaks(processedData, components, calculatedBaseline, baseline, 200);
         setFitResult(result);
         setComponents(result.parameters);
-        toast.success(`Fit complete! R² = ${result.rSquared.toFixed(4)}`);
+        const status = result.converged ? '✓ Converged' : '⚠ Not converged';
+        toast.success(`Fit complete! R² = ${result.rSquared.toFixed(4)} (${status}, ${result.iterations} iter)`);
       } catch (error) {
         toast.error('Fitting failed');
         console.error(error);
@@ -109,7 +118,7 @@ const Index = () => {
         setIsLoading(false);
       }
     }, 50);
-  }, [processedData, components, calculatedBaseline]);
+  }, [processedData, components, calculatedBaseline, baseline]);
 
   // Reset everything
   const handleReset = useCallback(() => {
@@ -122,6 +131,8 @@ const Index = () => {
       lambda: 1e5,
       p: 0.01,
       radius: 10,
+      shirleyIterations: 50,
+      shirleyTolerance: 1e-5,
     });
     toast.info('Settings reset');
   }, []);
@@ -130,7 +141,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <Hero />
-      
+
       <main className="container py-8 space-y-8">
         {/* File Upload Section */}
         {rawData.length === 0 && (
@@ -149,6 +160,8 @@ const Index = () => {
                 baseline={baseline}
                 components={components}
                 dataRange={dataRange}
+                processedData={processedData}
+                calculatedBaseline={calculatedBaseline}
                 onProcessingChange={setProcessing}
                 onBaselineChange={setBaseline}
                 onComponentsChange={setComponents}
@@ -156,7 +169,7 @@ const Index = () => {
                 onReset={handleReset}
                 isLoading={isLoading}
               />
-              
+
               {/* Upload new file button */}
               <div className="text-center">
                 <label className="cursor-pointer text-sm text-primary hover:underline">
@@ -184,6 +197,14 @@ const Index = () => {
             <div className="lg:col-span-2 space-y-4">
               {/* Display Options */}
               <div className="flex flex-wrap gap-6 justify-end">
+                <div className="flex items-center gap-2 border-r pr-4">
+                  <Switch
+                    id="livePreview"
+                    checked={livePreview}
+                    onCheckedChange={setLivePreview}
+                  />
+                  <Label htmlFor="livePreview" className="text-sm font-medium">Live Preview</Label>
+                </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     id="showBaseline"
@@ -212,19 +233,23 @@ const Index = () => {
 
               <DataChart
                 data={processedData}
-                fitResult={fitResult || (baseline.method !== 'none' ? { 
-                  fittedData: [], 
-                  residuals: [], 
-                  components: [], 
-                  baseline: calculatedBaseline,
-                  rSquared: 0,
-                  rmse: 0,
-                  parameters: []
-                } : undefined)}
+                fitResult={fitResult}
+                previewComponents={livePreview ? components : undefined}
+                previewBaseline={livePreview && baseline.method !== 'none' ? calculatedBaseline : undefined}
                 showBaseline={showBaseline}
                 showComponents={showComponents}
                 showResiduals={showResiduals}
                 title={fileName || 'Spectrum Data'}
+                manualBaselinePoints={baseline.manualPoints}
+                showManualMarkers={baseline.method === 'manual' && baseline.manualEditMode}
+                onAddManualPoint={(point) => {
+                  if (!baseline.manualEditMode) return;
+                  const currentPoints = baseline.manualPoints || [];
+                  setBaseline({
+                    ...baseline,
+                    manualPoints: [...currentPoints, point].sort((a, b) => a.x - b.x),
+                  });
+                }}
               />
 
               <ResultsPanel

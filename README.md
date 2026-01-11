@@ -1,73 +1,70 @@
-# Welcome to your Lovable project
+# PeakiPy Web App
 
-## Project info
+A browser-based peak fitting application for analyzing X/Y spectral data with multiple peak profiles and advanced baseline correction.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+### Profile Functions
+- **Gaussian**: Standard normal distribution peak
+- **Lorentzian**: Cauchy distribution peak, ideal for spectral broadening
+- **Voigt**: Pseudo-Voigt approximation of Gaussian-Lorentzian convolution
 
-There are several ways of editing your application.
+### Baseline Correction
+- **None**: No baseline subtraction
+- **Linear**: Two-point linear baseline with adjustable slope/intercept
+- **Polynomial**: Robust iterative polynomial fitting (degree 1-5)
+- **AsLS**: Asymmetric Least Squares with λ and p parameters
+- **Rolling Ball**: Morphological baseline with adjustable radius
+- **Shirley**: Classical XPS background correction
+- **Manual (Click Points)**: Click on chart to define control points with linear or cubic spline interpolation
 
-**Use Lovable**
+### Data Processing
+- **X Range**: Crop data to specific min/max values
+- **Interpolation**: Resample data to uniform step size (supports extending beyond data range)
+- **Outlier Removal**: Z-score or IQR methods with adjustable threshold
+- **Smoothing**: Savitzky-Golay filter with window length and polynomial order
+- **Normalization**: Scale intensities to max = 1
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### Fitting
+- **Levenberg-Marquardt**: Robust nonlinear least squares optimization
+- **Component Weights**: Adjustable contribution of each peak
+- **Live Preview**: Real-time visualization while adjusting parameters
 
-Changes made via Lovable will be committed automatically to this repo.
+### Export
+- **SVG Charts**: Export publication-quality vector graphics
+- **Fit Results**: Download fitting statistics and parameters
 
-**Use your preferred IDE**
+## Quick Start
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Install dependencies
+npm install
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
+
+# Build for production
+npm run build
 ```
 
-**Edit a file directly in GitHub**
+## Technology Stack
+- **Vite** - Fast build tool
+- **React** + **TypeScript** - UI framework
+- **Recharts** - Chart library
+- **shadcn/ui** - UI components
+- **Tailwind CSS** - Styling
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Processing Pipeline
 
-**Use GitHub Codespaces**
+1. **Outlier Removal** (optional) - Remove statistical outliers
+2. **Crop** - Select X range of interest
+3. **Interpolation** - Resample to uniform spacing
+4. **Smoothing** (optional) - Apply Savitzky-Golay filter
+5. **Normalization** (optional) - Scale to max = 1
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## License
+MIT License
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Author
+M. Holmboe  
+michael.holmboe@umu.se
