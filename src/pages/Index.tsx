@@ -269,7 +269,7 @@ const Index = () => {
       <footer className="border-t border-border py-8 mt-16">
         <div className="container text-center text-sm text-muted-foreground">
           <p>
-            Based on <a href="https://github.com/mholmboe/peakipy" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">PeakiPy</a> by mholmboe
+            Based on <a href="https://github.com/mholmboe/peakipy" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">PeakiPy</a>
           </p>
           <p className="mt-1">
             Profile fitting application for baseline subtraction and peak analysis
