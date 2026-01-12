@@ -143,48 +143,68 @@ export function ResultsPanel({
             {/* Fitted Parameters */}
             <div className="border-t border-border pt-4">
               <h4 className="text-sm font-medium mb-3">Fitted Parameters</h4>
+
+              {/* Total Amplitude - shown once */}
+              <div className="p-3 bg-primary/10 rounded-lg mb-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Total Amplitude</span>
+                  <span className="font-mono text-lg">
+                    {fitResult.parameters.length > 0
+                      ? fitResult.parameters.reduce((sum, p) => sum + p.amplitude * (p.weight ?? 1), 0).toFixed(4)
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+
               <div className="space-y-3">
-                {fitResult.parameters.map((param, idx) => (
-                  <div
-                    key={param.id}
-                    className="p-3 bg-muted/30 rounded-lg space-y-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{
-                          backgroundColor: [
-                            'hsl(198, 93%, 59%)',
-                            'hsl(213, 93%, 67%)',
-                            'hsl(158, 64%, 51%)',
-                            'hsl(270, 60%, 60%)',
-                            'hsl(45, 95%, 55%)',
-                          ][idx % 5],
-                        }}
-                      />
-                      <span className="font-medium text-sm">
-                        Peak {param.id}
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {param.profile}
-                      </Badge>
+                {fitResult.parameters.map((param, idx) => {
+                  // Calculate weight as fraction (should already be set, but compute for display safety)
+                  const totalAmp = fitResult.parameters.reduce((sum, p) => sum + p.amplitude * (p.weight ?? 1), 0);
+                  const individualAmp = param.amplitude * (param.weight ?? 1);
+                  const weight = totalAmp > 0 ? individualAmp / totalAmp : 0;
+
+                  return (
+                    <div
+                      key={param.id}
+                      className="p-3 bg-muted/30 rounded-lg space-y-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{
+                            backgroundColor: [
+                              'hsl(198, 93%, 59%)',
+                              'hsl(213, 93%, 67%)',
+                              'hsl(158, 64%, 51%)',
+                              'hsl(270, 60%, 60%)',
+                              'hsl(45, 95%, 55%)',
+                            ][idx % 5],
+                          }}
+                        />
+                        <span className="font-medium text-sm">
+                          Peak {param.id}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {param.profile}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <p className="text-muted-foreground">Center</p>
+                          <p className="font-mono">{param.center.toFixed(4)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Weight</p>
+                          <p className="font-mono">{(weight * 100).toFixed(1)}%</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Width</p>
+                          <p className="font-mono">{param.width.toFixed(4)}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <p className="text-muted-foreground">Center</p>
-                        <p className="font-mono">{param.center.toFixed(4)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Amplitude</p>
-                        <p className="font-mono">{param.amplitude.toFixed(4)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Width</p>
-                        <p className="font-mono">{param.width.toFixed(4)}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </>

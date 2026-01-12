@@ -326,7 +326,19 @@ export function calculateBaseline(data: DataPoint[], options: BaselineOptions): 
       }
       break;
     case 'polynomial':
-      rangeBaseline = polynomialBaseline(rangeData, options.degree || 2);
+      // Use stored coefficients if autoBaseline is off and coeffs are provided
+      if (options.autoBaseline === false && (options as any).coeffs) {
+        const coeffs = (options as any).coeffs as number[];
+        rangeBaseline = rangeData.map(d => {
+          let y = 0;
+          for (let i = 0; i < coeffs.length; i++) {
+            y += coeffs[i] * Math.pow(d.x, i);
+          }
+          return { x: d.x, y };
+        });
+      } else {
+        rangeBaseline = polynomialBaseline(rangeData, options.degree || 2);
+      }
       break;
     case 'asls':
       rangeBaseline = aslsBaseline(rangeData, options.lambda || 1e5, options.p || 0.01);
@@ -995,10 +1007,9 @@ export function fitPeaks(
   const xVals = data.map(d => d.x);
   const yVals = data.map(d => d.y);
 
-  // Normalization factor for numerical stability
-  const maxAbsY = Math.max(...yVals.map(y => Math.abs(y)));
-  const normFactor = maxAbsY > 0 ? maxAbsY : 1;
-  const yValsNorm = yVals.map(y => y / normFactor);
+  // No internal normalization - work directly on input data scale like Python
+  // This assumes input data may already be normalized by the caller
+  const normFactor = 1.0;
 
   // Create baseline lookup
   const baselineMap = new Map<number, number>();
@@ -1009,7 +1020,7 @@ export function fitPeaks(
   const isParametricBaseline = baselineOptions?.method === 'linear' || baselineOptions?.method === 'polynomial';
 
   // Calculate initial baseline-corrected data for non-simultaneous case
-  const initialBaselineYVals = xVals.map(x => (baselineMap.get(x) || 0) / normFactor);
+  const initialBaselineYVals = xVals.map(x => baselineMap.get(x) || 0);
 
   // Pack component parameters into flat array: [center1, amp1, width1, center2, ...]
   // Apply weight to amplitude (weight × amplitude), then add baseline params if simultaneous
@@ -1017,7 +1028,7 @@ export function fitPeaks(
   for (const comp of components) {
     // Apply weight to amplitude (default weight is 1.0)
     const effectiveAmp = comp.amplitude * (comp.weight ?? 1.0);
-    initialParams.push(comp.center, effectiveAmp / normFactor, comp.width);
+    initialParams.push(comp.center, effectiveAmp, comp.width);
   }
 
   // Add baseline parameters for simultaneous optimization
@@ -1137,7 +1148,7 @@ export function fitPeaks(
         }
 
         // Compute AsLS baseline on (y - peaks)
-        const yMinusPeaks = yValsNorm.map((y, i) => y - peakOnly[i]);
+        const yMinusPeaks = yVals.map((y, i) => y - peakOnly[i]);
         const aslsData = x.map((xi, i) => ({ x: xi, y: yMinusPeaks[i] }));
         const aslsBl = aslsBaseline(aslsData, lambda, p, 5); // Reduced iterations for speed
 
@@ -1173,7 +1184,7 @@ export function fitPeaks(
         }
 
         // Compute rolling ball baseline on (y - peaks)
-        const yMinusPeaks = yValsNorm.map((y, i) => y - peakOnly[i]);
+        const yMinusPeaks = yVals.map((y, i) => y - peakOnly[i]);
         const rbData = x.map((xi, i) => ({ x: xi, y: yMinusPeaks[i] }));
         const rbBl = rollingBallBaseline(rbData, radius);
 
@@ -1209,7 +1220,7 @@ export function fitPeaks(
         }
 
         // Compute shirley baseline on (y - peaks) with offset adjustments
-        const yMinusPeaks = yValsNorm.map((y, i) => y - peakOnly[i]);
+        const yMinusPeaks = yVals.map((y, i) => y - peakOnly[i]);
         // Apply offsets: adjust first and last values
         const adjustedData = yMinusPeaks.map((y, i) => {
           if (i === 0) return y + startOffset;
@@ -1233,7 +1244,7 @@ export function fitPeaks(
 
   // For non-simultaneous optimization, fit to baseline-corrected data
   // For simultaneous optimization, fit to raw data with baseline as part of model
-  const targetYVals = optimizeBaseline ? yValsNorm : yValsNorm.map((y, i) => y - initialBaselineYVals[i]);
+  const targetYVals = optimizeBaseline ? yVals : yVals.map((y, i) => y - initialBaselineYVals[i]);
 
   // Run Levenberg-Marquardt optimization
   const lmResult = levenbergMarquardt(xVals, targetYVals, initialParams, modelFunc, {
@@ -1242,11 +1253,13 @@ export function fitPeaks(
   });
 
   // Unpack optimized peak parameters
+  // Reset weight to 1.0 so caller can recalculate weights from fitted amplitudes
   const optimizedParams: PeakComponent[] = components.map((comp, i) => ({
     ...comp,
     center: lmResult.params[i * 3],
-    amplitude: Math.max(0, lmResult.params[i * 3 + 1] * normFactor),
+    amplitude: Math.max(0, lmResult.params[i * 3 + 1]),
     width: Math.max(0.01, lmResult.params[i * 3 + 2]),
+    weight: 1.0,  // Reset - caller will recalculate as fraction of total
   }));
 
   // Extract optimized baseline parameters if applicable
@@ -1257,15 +1270,15 @@ export function fitPeaks(
     const blParamsStart = components.length * 3;
 
     if (baselineOptions!.method === 'linear') {
-      const slope = lmResult.params[blParamsStart] * normFactor;
-      const intercept = lmResult.params[blParamsStart + 1] * normFactor;
+      const slope = lmResult.params[blParamsStart];
+      const intercept = lmResult.params[blParamsStart + 1];
       optimizedBaselineParams = { slope, intercept };
       optimizedBaseline = xVals.map(x => ({ x, y: slope * x + intercept }));
     } else if (baselineOptions!.method === 'polynomial') {
       const degree = baselineOptions!.degree ?? 2;
       const coeffs = [];
       for (let d = 0; d <= degree; d++) {
-        coeffs.push(lmResult.params[blParamsStart + d] * normFactor);
+        coeffs.push(lmResult.params[blParamsStart + d]);
       }
       optimizedBaselineParams = { coeffs };
       optimizedBaseline = xVals.map(x => {
@@ -1283,7 +1296,7 @@ export function fitPeaks(
 
       // Compute final baseline with optimized parameters
       const peakModel = modelFunc(xVals, lmResult.params.slice(0, components.length * 3));
-      const yMinusPeaks = yVals.map((y, i) => y - peakModel[i] * normFactor);
+      const yMinusPeaks = yVals.map((y, i) => y - peakModel[i]);
       const aslsData = xVals.map((x, i) => ({ x, y: yMinusPeaks[i] }));
       optimizedBaseline = aslsBaseline(aslsData, lambda, p, 10);
     } else if (baselineOptions!.method === 'rolling_ball') {
@@ -1292,17 +1305,16 @@ export function fitPeaks(
 
       // Compute final baseline with optimized radius
       const peakModel = modelFunc(xVals, lmResult.params.slice(0, components.length * 3));
-      const yMinusPeaks = yVals.map((y, i) => y - peakModel[i] * normFactor);
+      const yMinusPeaks = yVals.map((y, i) => y - peakModel[i]);
       const rbData = xVals.map((x, i) => ({ x, y: yMinusPeaks[i] }));
       optimizedBaseline = rollingBallBaseline(rbData, radius);
     } else if (baselineOptions!.method === 'shirley') {
-      // For shirley, we don't have specific params to return but we recompute baseline
-      const startOffset = lmResult.params[blParamsStart] * normFactor;
-      const endOffset = lmResult.params[blParamsStart + 1] * normFactor;
+      const startOffset = lmResult.params[blParamsStart];
+      const endOffset = lmResult.params[blParamsStart + 1];
 
       // Compute final baseline with optimized offsets
       const peakModel = modelFunc(xVals, lmResult.params.slice(0, components.length * 3));
-      const yMinusPeaks = yVals.map((y, i) => y - peakModel[i] * normFactor);
+      const yMinusPeaks = yVals.map((y, i) => y - peakModel[i]);
       // Apply offsets
       const adjustedData = yMinusPeaks.map((y, i) => {
         if (i === 0) return y + startOffset;
@@ -1335,26 +1347,30 @@ export function fitPeaks(
     const d = data[i];
     const baselineY = finalBaselineMap.get(d.x) || 0;
     const correctedY = d.y - baselineY;
-    baselineCorrectedData.push({ x: d.x, y: correctedY / normFactor });
+    // Store corrected data in NORMALIZED scale (matches input data scale)
+    baselineCorrectedData.push({ x: d.x, y: correctedY });
 
-    let fittedYNorm = 0;
+    let fittedY = 0;
     optimizedParams.forEach((comp, j) => {
       const peakY = calculatePeak(d.x, comp);
-      const peakYNorm = peakY / normFactor;
-      fittedYNorm += peakYNorm;
-      componentData[j].push({ x: d.x, y: peakYNorm });
+      fittedY += peakY;
+      // Store component data in NORMALIZED scale (matching input data)
+      componentData[j].push({ x: d.x, y: peakY });
     });
 
-    fittedData.push({ x: d.x, y: fittedYNorm });
-    const correctedYNorm = correctedY / normFactor;
-    residuals.push({ x: d.x, y: correctedYNorm - fittedYNorm });
+    // Store fitted data in NORMALIZED scale
+    fittedData.push({ x: d.x, y: fittedY });
+    residuals.push({ x: d.x, y: correctedY - fittedY });
 
+    // Use normalized values for statistics
+    const correctedYNorm = correctedY / normFactor;
+    const fittedYNorm = fittedY / normFactor;
     sumSquaredResiduals += (correctedYNorm - fittedYNorm) ** 2;
     sumSquaredTotal += (d.y / normFactor - meanY / normFactor) ** 2;
   }
 
-  // Normalize baseline for display
-  const normalizedBaseline = finalBaseline.map(b => ({ x: b.x, y: b.y / normFactor }));
+  // Return baseline in same scale as input data
+  const finalBaselineOutput = finalBaseline;
 
   // Calculate fit statistics
   const rSquared = 1 - sumSquaredResiduals / (sumSquaredTotal || 1);
@@ -1373,7 +1389,7 @@ export function fitPeaks(
     fittedData,
     residuals,
     components: componentData,
-    baseline: normalizedBaseline,
+    baseline: finalBaselineOutput,
     baselineCorrectedData,
     rSquared: Math.max(0, rSquared),
     adjustedRSquared: Math.max(0, adjustedRSquared),
@@ -1385,7 +1401,7 @@ export function fitPeaks(
     parameters: optimizedParams,
     iterations: lmResult.iterations,
     converged: lmResult.converged,
-    optimizedBaseline: optimizedBaseline ? optimizedBaseline.map(b => ({ x: b.x, y: b.y / normFactor })) : undefined,
+    optimizedBaseline: optimizedBaseline,
     baselineParams: optimizedBaselineParams,
   };
 }
@@ -1463,10 +1479,19 @@ export function exportResults(
   lines.push('#');
   lines.push('# Fitted Parameters:');
 
-  for (const param of fitResult.parameters) {
+  // Calculate Total Amplitude and Weights
+  const fittedAmps = fitResult.parameters.map(p => p.amplitude * (p.weight ?? 1));
+  const totalAmp = fittedAmps.reduce((sum, a) => sum + a, 0);
+
+  lines.push(`#   Total Amplitude: ${totalAmp.toFixed(6)}`);
+  lines.push('#');
+
+  for (let i = 0; i < fitResult.parameters.length; i++) {
+    const param = fitResult.parameters[i];
+    const weight = totalAmp > 0 ? fittedAmps[i] / totalAmp : 0;
     lines.push(`#   Peak ${param.id}: ${param.profile}`);
     lines.push(`#     Center: ${param.center.toFixed(4)}`);
-    lines.push(`#     Amplitude: ${param.amplitude.toFixed(4)}`);
+    lines.push(`#     Weight: ${(weight * 100).toFixed(2)}%`);
     lines.push(`#     Width (FWHM): ${param.width.toFixed(4)}`);
   }
 

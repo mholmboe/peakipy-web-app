@@ -108,7 +108,45 @@ const Index = () => {
       try {
         const result = fitPeaks(processedData, components, calculatedBaseline, baseline, 200);
         setFitResult(result);
-        setComponents(result.parameters);
+
+        // Recalculate Total Amplitude and Weights from fitted parameters
+        // Total Amplitude = sum of all component amplitudes
+        // Weight = component amplitude / total amplitude (fractions summing to 1)
+        const fittedAmps = result.parameters.map(p => p.amplitude);
+        const totalAmp = fittedAmps.reduce((sum, a) => sum + a, 0);
+        const updatedComponents = result.parameters.map(p => ({
+          ...p,
+          amplitude: totalAmp,  // All components share the total amplitude
+          weight: totalAmp > 0 ? p.amplitude / totalAmp : 1 / result.parameters.length,
+        }));
+        setComponents(updatedComponents);
+
+        // After simultaneous optimization, update baseline state with optimized params
+        // This ensures calculatedBaseline is recomputed with correct values
+        if (baseline.optimizeSimultaneously && result.baselineParams) {
+          const updatedBaseline = { ...baseline, autoBaseline: false };
+          if (result.baselineParams.slope !== undefined) {
+            updatedBaseline.slope = result.baselineParams.slope;
+          }
+          if (result.baselineParams.intercept !== undefined) {
+            updatedBaseline.intercept = result.baselineParams.intercept;
+          }
+          if (result.baselineParams.coeffs !== undefined) {
+            // Store coefficients for polynomial baseline
+            (updatedBaseline as any).coeffs = result.baselineParams.coeffs;
+          }
+          if (result.baselineParams.lambda !== undefined) {
+            updatedBaseline.lambda = result.baselineParams.lambda;
+          }
+          if (result.baselineParams.p !== undefined) {
+            updatedBaseline.p = result.baselineParams.p;
+          }
+          if (result.baselineParams.radius !== undefined) {
+            updatedBaseline.radius = result.baselineParams.radius;
+          }
+          setBaseline(updatedBaseline);
+        }
+
         const status = result.converged ? '✓ Converged' : '⚠ Not converged';
         toast.success(`Fit complete! R² = ${result.rSquared.toFixed(4)} (${status}, ${result.iterations} iter)`);
       } catch (error) {

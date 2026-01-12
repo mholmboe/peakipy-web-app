@@ -709,6 +709,28 @@ export function ControlPanel({
               </Button>
             </div>
 
+            {/* Global Total Amplitude Control */}
+            {components.length > 0 && (
+              <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+                <Label className="text-sm font-medium">
+                  Total Amplitude: {components[0]?.amplitude.toFixed(4)}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Shared intensity of all peaks (individual peaks scaled by weights)
+                </p>
+                <Slider
+                  value={[components[0]?.amplitude ?? 1]}
+                  min={0.001}
+                  max={Math.max(...processedData.map(d => d.y), 1) * 2}
+                  step={Math.max(...processedData.map(d => d.y), 1) / 200}
+                  onValueChange={([value]) => {
+                    // Update all components to share the same amplitude
+                    onComponentsChange(components.map(c => ({ ...c, amplitude: value })));
+                  }}
+                />
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
                 {components.length} peak{components.length !== 1 ? 's' : ''} defined
@@ -784,19 +806,6 @@ export function ControlPanel({
                           step={0.01}
                           onValueChange={([value]) =>
                             updateComponentWeight(comp.id, value)
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Amplitude: {comp.amplitude.toFixed(2)}</Label>
-                        <Slider
-                          value={[comp.amplitude]}
-                          min={0}
-                          max={Math.max(...processedData.map(d => d.y), 1) * 2}
-                          step={Math.max(...processedData.map(d => d.y), 1) / 100}
-                          onValueChange={([value]) =>
-                            updateComponent(comp.id, { amplitude: value })
                           }
                         />
                       </div>
