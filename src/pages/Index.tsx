@@ -107,22 +107,6 @@ const Index = () => {
     setTimeout(() => {
       try {
         const result = fitPeaks(processedData, components, calculatedBaseline, baseline, 200);
-        setFitResult(result);
-
-        // Recalculate Total Amplitude and Weights from fitted parameters
-        // Total Amplitude = sum of all component amplitudes
-        // Weight = component amplitude / total amplitude (fractions summing to 1)
-        const fittedAmps = result.parameters.map(p => p.amplitude);
-        const totalAmp = fittedAmps.reduce((sum, a) => sum + a, 0);
-        const updatedComponents = result.parameters.map(p => ({
-          ...p,
-          amplitude: totalAmp,  // All components share the total amplitude
-          weight: totalAmp > 0 ? p.amplitude / totalAmp : 1 / result.parameters.length,
-        }));
-        setComponents(updatedComponents);
-
-        // After simultaneous optimization, update baseline state with optimized params
-        // This ensures calculatedBaseline is recomputed with correct values
         if (baseline.optimizeSimultaneously && result.baselineParams) {
           const updatedBaseline = { ...baseline, autoBaseline: false };
           if (result.baselineParams.slope !== undefined) {
@@ -146,6 +130,46 @@ const Index = () => {
           }
           setBaseline(updatedBaseline);
         }
+
+        // AUTO-SCALING FOR NORMALIZED VIEW
+        // If normalization is enabled, the user expects the CORRETED data to be normalized (max=1)
+        // But physically, Corrected = NormalizedRaw (max=1) - Baseline, so max < 1.
+        // To meet user expectation, we scale the entire result set so Corrected max = 1.
+        if (processing.normalize) {
+          const maxCorrected = Math.max(...result.baselineCorrectedData.map(d => d.y), 0);
+          if (maxCorrected > 0 && Math.abs(maxCorrected - 1) > 0.001) {
+            const scaleFactor = 1.0 / maxCorrected;
+
+            // Scale data arrays
+            result.baselineCorrectedData = result.baselineCorrectedData.map(d => ({ ...d, y: d.y * scaleFactor }));
+            result.fittedData = result.fittedData.map(d => ({ ...d, y: d.y * scaleFactor }));
+            result.components = result.components.map(cArr => cArr.map(d => ({ ...d, y: d.y * scaleFactor })));
+            result.residuals = result.residuals.map(d => ({ ...d, y: d.y * scaleFactor }));
+
+            // Scale parameters (Amplitude and Area/others if present)
+            result.parameters = result.parameters.map(p => ({
+              ...p,
+              amplitude: p.amplitude * scaleFactor
+            }));
+
+            // Note: We do NOT scale result.baseline because that aligns with the raw processedData (top chart)
+          }
+        }
+
+        // Update state with (potentially scaled) result
+        setFitResult(result);
+
+        // Recalculate Total Amplitude and Weights from fitted parameters
+        // Total Amplitude = sum of all component amplitudes
+        // Weight = component amplitude / total amplitude (fractions summing to 1)
+        const fittedAmps = result.parameters.map(p => p.amplitude);
+        const totalAmp = fittedAmps.reduce((sum, a) => sum + a, 0);
+        const updatedComponents = result.parameters.map(p => ({
+          ...p,
+          amplitude: totalAmp,  // All components share the total amplitude
+          weight: totalAmp > 0 ? p.amplitude / totalAmp : 1 / result.parameters.length,
+        }));
+        setComponents(updatedComponents);
 
         const status = result.converged ? '✓ Converged' : '⚠ Not converged';
         toast.success(`Fit complete! R² = ${result.rSquared.toFixed(4)} (${status}, ${result.iterations} iter)`);
@@ -278,6 +302,7 @@ const Index = () => {
                 showComponents={showComponents}
                 showResiduals={showResiduals}
                 title={fileName || 'Spectrum Data'}
+                normalize={processing.normalize}
                 manualBaselinePoints={baseline.manualPoints}
                 showManualMarkers={baseline.method === 'manual' && baseline.manualEditMode}
                 onAddManualPoint={(point) => {

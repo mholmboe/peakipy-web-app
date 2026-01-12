@@ -692,10 +692,17 @@ export function ControlPanel({
                 onClick={() => {
                   // Use baseline-corrected data for initialization (like Python app)
                   const baselineMap = new Map(calculatedBaseline.map(b => [b.x, b.y]));
-                  const correctedData = processedData.map(d => ({
+                  let correctedData = processedData.map(d => ({
                     x: d.x,
                     y: d.y - (baselineMap.get(d.x) ?? 0)
                   }));
+
+                  // Apply normalization scaling if normalize is enabled
+                  // This matches what the chart displays
+                  if (processing.normalize) {
+                    const maxY = Math.max(...correctedData.map(d => d.y), 0.001);
+                    correctedData = correctedData.map(d => ({ ...d, y: d.y / maxY }));
+                  }
 
                   const dataForInit = calculatedBaseline.length > 0 ? correctedData : processedData;
                   const newComps = initMethod === 'gmm'

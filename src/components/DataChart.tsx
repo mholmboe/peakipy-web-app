@@ -33,6 +33,8 @@ interface DataChartProps {
   onAddManualPoint?: (point: DataPoint) => void;
   /** Whether to show manual baseline point markers */
   showManualMarkers?: boolean;
+  /** Whether to normalize the baseline-corrected data to max=1 */
+  normalize?: boolean;
 }
 
 // Format tick values to show clean, nicely spaced values
@@ -99,6 +101,7 @@ export function DataChart({
   manualBaselinePoints,
   onAddManualPoint,
   showManualMarkers = false,
+  normalize = false,
 }: DataChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const plot1Ref = useRef<HTMLDivElement>(null);
@@ -151,15 +154,35 @@ export function DataChart({
     });
 
     // Plot 2: Baseline-corrected + fitted components
-    const p2Data = data.map(d => {
+    // First pass: calculate raw corrected values to find max for normalization
+    let rawCorrectedValues: { x: number; corrected: number }[] = [];
+    if (!fitResult?.baselineCorrectedData && normalize) {
+      rawCorrectedValues = data.map(d => {
+        const bl = activeBaseline?.find(b => Math.abs(b.x - d.x) < 0.0001)?.y ?? 0;
+        return { x: d.x, corrected: d.y - bl };
+      });
+    }
+    const preFitMaxCorrected = rawCorrectedValues.length > 0
+      ? Math.max(...rawCorrectedValues.map(v => v.corrected), 0.001)
+      : 1;
+    const preFitScaleFactor = normalize && !fitResult?.baselineCorrectedData ? 1.0 / preFitMaxCorrected : 1;
+
+    const p2Data = data.map((d, i) => {
       const point: Record<string, number> = { x: d.x };
-      const bl = activeBaseline?.find(b => Math.abs(b.x - d.x) < 0.0001)?.y ?? 0;
 
-      // Baseline-corrected experimental
-      point.corrected = d.y - bl;
+      // Always use fitResult.baselineCorrectedData when available (it's scaled for normalization)
+      if (fitResult?.baselineCorrectedData) {
+        const correctedPoint = fitResult.baselineCorrectedData.find(c => Math.abs(c.x - d.x) < 0.0001);
+        point.corrected = correctedPoint?.y ?? (d.y - (activeBaseline?.find(b => Math.abs(b.x - d.x) < 0.0001)?.y ?? 0));
+      } else {
+        // No fit result: calculate from raw data, apply normalization scaling
+        const bl = activeBaseline?.find(b => Math.abs(b.x - d.x) < 0.0001)?.y ?? 0;
+        point.corrected = (d.y - bl) * preFitScaleFactor;
+      }
 
-      // Calculate preview components or use fit result
+      // For fitted/preview curves, use fitResult when no preview, else calculate preview
       if (previewComponents && previewComponents.length > 0) {
+        // Live Preview mode: calculate from current component parameters
         let sumY = 0;
         previewComponents.forEach((comp, idx) => {
           const yVal = calculatePeak(d.x, comp);
@@ -167,15 +190,15 @@ export function DataChart({
           sumY += yVal;
         });
         point.fitted = sumY;
-      } else if (fitResult && !previewComponents) {
+      } else if (fitResult) {
+        // Use fitResult data (already scaled)
         const fitted = fitResult.fittedData.find(f => Math.abs(f.x - d.x) < 0.0001);
         if (fitted) point.fitted = fitted.y;
+
         fitResult.components.forEach((comp, idx) => {
           const compPoint = comp.find(c => Math.abs(c.x - d.x) < 0.0001);
           if (compPoint) point[`component${idx + 1}`] = compPoint.y;
         });
-        const correctedPoint = fitResult.baselineCorrectedData?.find(c => Math.abs(c.x - d.x) < 0.0001);
-        if (correctedPoint) point.corrected = correctedPoint.y;
       }
       return point;
     });
