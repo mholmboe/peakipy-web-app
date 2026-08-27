@@ -3,41 +3,42 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Upload, FileText } from 'lucide-react';
 
 interface FileUploadProps {
-  onFileLoad: (content: string, fileName: string) => void;
+  onFileLoad: (file: File) => void;
   acceptedFormats?: string;
 }
 
-export function FileUpload({ onFileLoad, acceptedFormats = '.txt,.csv,.dat,.xy' }: FileUploadProps) {
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      readFile(files[0]);
-    }
-  }, [onFileLoad]);
+export function FileUpload({
+  onFileLoad,
+  acceptedFormats = '.txt,.csv,.dat,.xy,.xrdml,.brml,.uxd',
+}: FileUploadProps) {
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        onFileLoad(files[0]);
+      }
+    },
+    [onFileLoad]
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      readFile(files[0]);
-    }
-  }, [onFileLoad]);
-
-  const readFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      onFileLoad(content, file.name);
-    };
-    reader.readAsText(file);
-  };
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        onFileLoad(files[0]);
+      }
+      e.target.value = '';
+    },
+    [onFileLoad]
+  );
 
   return (
     <Card className="border-2 border-dashed border-primary/30 bg-card/50 hover:border-primary/50 hover:bg-card/80 transition-all duration-300">
@@ -62,7 +63,7 @@ export function FileUpload({ onFileLoad, acceptedFormats = '.txt,.csv,.dat,.xy' 
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <FileText className="w-4 h-4" />
-                <span>Supports: TXT, CSV, DAT (two columns: X, Y)</span>
+                <span>Supports: TXT, CSV, DAT, XY, XRDML, BRML, UXD</span>
               </div>
             </div>
             <input

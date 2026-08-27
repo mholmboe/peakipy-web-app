@@ -19,6 +19,7 @@ import {
   type BaselineOptions,
   type FitResult,
 } from '@/lib/peakFitting';
+import { loadDataFile } from '@/lib/xrdFormats';
 
 const Index = () => {
   const [rawData, setRawData] = useState<DataPoint[]>([]);
@@ -71,21 +72,21 @@ const Index = () => {
   }, [processedData, baseline]);
 
   // Handle file load
-  const handleFileLoad = useCallback((content: string, name: string) => {
+  const handleFileLoad = useCallback(async (file: File) => {
     try {
-      const data = parseDataFile(content);
+      const data = await loadDataFile(file, parseDataFile);
       if (data.length === 0) {
         toast.error('No valid data found in file');
         return;
       }
 
       setRawData(data);
-      setFileName(name);
+      setFileName(file.name);
       setComponents([]);
       setFitResult(undefined);
-      toast.success(`Loaded ${data.length} data points from ${name}`);
+      toast.success(`Loaded ${data.length} data points from ${file.name}`);
     } catch (error) {
-      toast.error('Failed to parse data file');
+      toast.error(error instanceof Error ? error.message : 'Failed to parse data file');
       console.error(error);
     }
   }, []);
@@ -238,17 +239,14 @@ const Index = () => {
                   Load different file
                   <input
                     type="file"
-                    accept=".txt,.csv,.dat,.xy"
+                    accept=".txt,.csv,.dat,.xy,.xrdml,.brml,.uxd"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (evt) => {
-                          handleFileLoad(evt.target?.result as string, file.name);
-                        };
-                        reader.readAsText(file);
+                        handleFileLoad(file);
                       }
+                      e.target.value = '';
                     }}
                   />
                 </label>
