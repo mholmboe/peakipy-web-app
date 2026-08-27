@@ -193,6 +193,49 @@ export function ControlPanel({
               />
             </div>
 
+            {processing.normalize && (
+              <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+                <Label className="text-xs font-semibold">Normalization Range (Optional)</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="normMin" className="text-xs">Min X</Label>
+                    <Input
+                      id="normMin"
+                      type="number"
+                      className="h-7 text-xs"
+                      value={processing.normalizeRangeMin ?? ''}
+                      placeholder="Auto"
+                      onChange={e =>
+                        onProcessingChange({
+                          ...processing,
+                          normalizeRangeMin: e.target.value ? parseFloat(e.target.value) : undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="normMax" className="text-xs">Max X</Label>
+                    <Input
+                      id="normMax"
+                      type="number"
+                      className="h-7 text-xs"
+                      value={processing.normalizeRangeMax ?? ''}
+                      placeholder="Auto"
+                      onChange={e =>
+                        onProcessingChange({
+                          ...processing,
+                          normalizeRangeMax: e.target.value ? parseFloat(e.target.value) : undefined,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Normalize to maximum intensity within this range. Leave empty to use global maximum.
+                </p>
+              </div>
+            )}
+
             {/* Outlier Removal Section */}
             <div className="space-y-3 p-3 bg-muted/30 rounded-lg">
               <Label className="text-sm font-medium">Outlier Removal</Label>
@@ -700,7 +743,21 @@ export function ControlPanel({
                   // Apply normalization scaling if normalize is enabled
                   // This matches what the chart displays
                   if (processing.normalize) {
-                    const maxY = Math.max(...correctedData.map(d => d.y), 0.001);
+                    let maxY = 1.0;
+                    if (processing.normalizeRangeMin !== undefined || processing.normalizeRangeMax !== undefined) {
+                      const inRange = correctedData.filter(d => {
+                        const aboveMin = processing.normalizeRangeMin === undefined || d.x >= processing.normalizeRangeMin;
+                        const belowMax = processing.normalizeRangeMax === undefined || d.x <= processing.normalizeRangeMax;
+                        return aboveMin && belowMax;
+                      });
+                      if (inRange.length > 0) {
+                        maxY = Math.max(...inRange.map(d => d.y), 0.001);
+                      } else {
+                        maxY = Math.max(...correctedData.map(d => d.y), 0.001);
+                      }
+                    } else {
+                      maxY = Math.max(...correctedData.map(d => d.y), 0.001);
+                    }
                     correctedData = correctedData.map(d => ({ ...d, y: d.y / maxY }));
                   }
 

@@ -134,10 +134,27 @@ const Index = () => {
 
         // AUTO-SCALING FOR NORMALIZED VIEW
         // If normalization is enabled, the user expects the CORRETED data to be normalized (max=1)
-        // But physically, Corrected = NormalizedRaw (max=1) - Baseline, so max < 1.
-        // To meet user expectation, we scale the entire result set so Corrected max = 1.
+        // possibly within a specific range.
         if (processing.normalize) {
-          const maxCorrected = Math.max(...result.baselineCorrectedData.map(d => d.y), 0);
+          let maxCorrected = 1.0;
+
+          if (processing.normalizeRangeMin !== undefined || processing.normalizeRangeMax !== undefined) {
+            const inRange = result.baselineCorrectedData.filter(d => {
+              const aboveMin = processing.normalizeRangeMin === undefined || d.x >= processing.normalizeRangeMin;
+              const belowMax = processing.normalizeRangeMax === undefined || d.x <= processing.normalizeRangeMax;
+              return aboveMin && belowMax;
+            });
+
+            if (inRange.length > 0) {
+              maxCorrected = Math.max(...inRange.map(d => d.y), 0);
+            } else {
+              // Fallback if range is empty
+              maxCorrected = Math.max(...result.baselineCorrectedData.map(d => d.y), 0);
+            }
+          } else {
+            maxCorrected = Math.max(...result.baselineCorrectedData.map(d => d.y), 0);
+          }
+
           if (maxCorrected > 0 && Math.abs(maxCorrected - 1) > 0.001) {
             const scaleFactor = 1.0 / maxCorrected;
 
@@ -301,6 +318,8 @@ const Index = () => {
                 showResiduals={showResiduals}
                 title={fileName || 'Spectrum Data'}
                 normalize={processing.normalize}
+                normalizeRangeMin={processing.normalizeRangeMin}
+                normalizeRangeMax={processing.normalizeRangeMax}
                 manualBaselinePoints={baseline.manualPoints}
                 showManualMarkers={baseline.method === 'manual' && baseline.manualEditMode}
                 onAddManualPoint={(point) => {

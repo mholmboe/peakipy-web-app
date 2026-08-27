@@ -51,6 +51,8 @@ export interface ProcessingOptions {
   xMax?: number;
   interpolationStep?: number;
   normalize: boolean;
+  normalizeRangeMin?: number;
+  normalizeRangeMax?: number;
   /** Savitzky-Golay smoothing options */
   smoothing?: {
     enabled: boolean;
@@ -965,7 +967,20 @@ export function processData(data: DataPoint[], options: ProcessingOptions): Data
 
   // Step 5: Normalize
   if (options.normalize && processed.length > 0) {
-    const maxY = Math.max(...processed.map(d => Math.abs(d.y)));
+    let normData = processed;
+
+    // If normalization range is specified, find max within that range
+    if (options.normalizeRangeMin !== undefined || options.normalizeRangeMax !== undefined) {
+      normData = processed.filter(d => {
+        const aboveMin = options.normalizeRangeMin === undefined || d.x >= options.normalizeRangeMin;
+        const belowMax = options.normalizeRangeMax === undefined || d.x <= options.normalizeRangeMax;
+        return aboveMin && belowMax;
+      });
+      // Fallback to full data if range is invalid/empty
+      if (normData.length === 0) normData = processed;
+    }
+
+    const maxY = Math.max(...normData.map(d => Math.abs(d.y)));
     if (maxY > 0) {
       processed = processed.map(d => ({ x: d.x, y: d.y / maxY }));
     }

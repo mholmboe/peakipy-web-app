@@ -23,7 +23,7 @@ A browser-based peak fitting application for analyzing X/Y spectral data with mu
 - **Interpolation**: Resample data to uniform step size (supports extending beyond data range)
 - **Outlier Removal**: Z-score or IQR methods with adjustable threshold
 - **Smoothing**: Savitzky-Golay filter with window length and polynomial order
-- **Normalization**: Scale intensities to max = 1
+- **Normalization**: Scale intensities to max = 1. Optionally specify a **range (Min X – Max X)** to normalize based on the maximum within that range, allowing normalization to a specific reference peak.
 
 ### Fitting
 - **Levenberg-Marquardt**: Robust nonlinear least squares optimization

@@ -35,6 +35,10 @@ interface DataChartProps {
   showManualMarkers?: boolean;
   /** Whether to normalize the baseline-corrected data to max=1 */
   normalize?: boolean;
+  /** Lower X limit for normalization range */
+  normalizeRangeMin?: number;
+  /** Upper X limit for normalization range */
+  normalizeRangeMax?: number;
 }
 
 // Format tick values to show clean, nicely spaced values
@@ -102,6 +106,8 @@ export function DataChart({
   onAddManualPoint,
   showManualMarkers = false,
   normalize = false,
+  normalizeRangeMin,
+  normalizeRangeMax,
 }: DataChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const plot1Ref = useRef<HTMLDivElement>(null);
@@ -161,6 +167,18 @@ export function DataChart({
         const bl = activeBaseline?.find(b => Math.abs(b.x - d.x) < 0.0001)?.y ?? 0;
         return { x: d.x, corrected: d.y - bl };
       });
+
+      // Filter by range if specified
+      if (normalizeRangeMin !== undefined || normalizeRangeMax !== undefined) {
+        const filtered = rawCorrectedValues.filter(v => {
+          const aboveMin = normalizeRangeMin === undefined || v.x >= normalizeRangeMin;
+          const belowMax = normalizeRangeMax === undefined || v.x <= normalizeRangeMax;
+          return aboveMin && belowMax;
+        });
+        if (filtered.length > 0) {
+          rawCorrectedValues = filtered;
+        }
+      }
     }
     const preFitMaxCorrected = rawCorrectedValues.length > 0
       ? Math.max(...rawCorrectedValues.map(v => v.corrected), 0.001)
